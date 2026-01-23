@@ -15,11 +15,20 @@
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, nix-filter, crane, fenix }:
-    flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+      nix-filter,
+      crane,
+      fenix,
+    }:
+    flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (
+      system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        craneLib = crane.lib.${system}.overrideToolchain fenix.packages.${system}.stable.toolchain;
+        craneLib = (crane.mkLib pkgs).overrideToolchain fenix.packages.${system}.stable.toolchain;
         pkgDef = {
           src = nix-filter.lib.filter {
             root = ./.;
@@ -38,30 +47,34 @@
           ];
           buildInputs = with pkgs; [
             libxkbcommon
-            wayland 
+            wayland
             freetype
             fontconfig
             expat
             lld
             desktop-file-utils
             stdenv.cc.cc.lib
-           ];
+          ];
           runtimeDependencies = with pkgs; [
             wayland
           ];
         };
 
         cargoArtifacts = craneLib.buildDepsOnly pkgDef;
-        cosmic-launcher= craneLib.buildPackage (pkgDef // {
-          inherit cargoArtifacts;
-        });
-      in {
+        cosmic-launcher = craneLib.buildPackage (
+          pkgDef
+          // {
+            inherit cargoArtifacts;
+          }
+        );
+      in
+      {
         checks = {
           inherit cosmic-launcher;
         };
 
         packages.default = cosmic-launcher.overrideAttrs (oldAttrs: rec {
-          buildPhase= ''
+          buildPhase = ''
             just prefix=$out build-release
           '';
           installPhase = ''
@@ -75,13 +88,18 @@
 
         devShells.default = pkgs.mkShell rec {
           inputsFrom = builtins.attrValues self.checks.${system};
-          LD_LIBRARY_PATH = pkgs.lib.strings.makeLibraryPath (builtins.concatMap (d: d.runtimeDependencies) inputsFrom);
+          LD_LIBRARY_PATH = pkgs.lib.strings.makeLibraryPath (
+            builtins.concatMap (d: d.runtimeDependencies) inputsFrom
+          );
         };
-      });
+      }
+    );
 
   nixConfig = {
     # Cache for the Rust toolchain in fenix
     extra-substituters = [ "https://nix-community.cachix.org" ];
-    extra-trusted-public-keys = [ "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=" ];
+    extra-trusted-public-keys = [
+      "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+    ];
   };
 }
